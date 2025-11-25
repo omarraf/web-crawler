@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,20 +10,34 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/omarraf/web-scraper/internal/database"
 )
+
+type apiConfig struct {
+	DB *database.Queries
+}
 
 func main() {
 
 	godotenv.Load(".env")
 	portString := os.Getenv("PORT")
 	if portString == "" {
-		log.Fatal("PORT is not found ni the environment")
+		log.Fatal("PORT is not found in the environment")
 	}
 	fmt.Println("PORT:", portString)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is not found in the environment")
+	}
+	conn, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal("Cannot open database:", err)
+	}
+
+	apiCfg := apiConfig{
+		DB: database.New(conn),
 	}
 
 	db, err := initDB(dbURL)
@@ -46,6 +61,7 @@ func main() {
 	v1Router := chi.NewRouter()
 	v1Router.HandleFunc("/healthz", handlerReadiness)
 	v1Router.Get("/err", handleErr)
+	v1Router.Post("/users", apiCfg.handlerCreateUser)
 
 	router.Mount("/v1", v1Router)
 
