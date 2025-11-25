@@ -20,6 +20,17 @@ func main() {
 	}
 	fmt.Println("PORT:", portString)
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL is not found in the environment")
+	}
+
+	db, err := initDB(dbURL)
+	if err != nil {
+		log.Fatal("Cannot connect to database:", err)
+	}
+	defer db.Close()
+
 	router := chi.NewRouter()
 
 	// send extra http headers
@@ -45,7 +56,7 @@ func main() {
 
 	log.Printf("Server is starting on port %s\n", portString)
 
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
