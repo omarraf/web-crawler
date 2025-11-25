@@ -13,7 +13,7 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	type errResponse struct {
 		Error string `json:"error"`
 	}
-	respondWithJSON()
+	respondWithJSON(w, code, errResponse{Error: message})
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
