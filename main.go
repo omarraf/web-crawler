@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -46,6 +47,9 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start the scraper in a goroutine
+	go startScraping(apiCfg.DB, 10, time.Minute)
+
 	router := chi.NewRouter()
 
 	// send extra http headers
@@ -62,6 +66,20 @@ func main() {
 	v1Router.HandleFunc("/healthz", handlerReadiness)
 	v1Router.Get("/err", handleErr)
 	v1Router.Post("/users", apiCfg.handlerCreateUser)
+	// This route requires authentication - notice how we wrap it with middlewareAuth
+	v1Router.Get("/users", apiCfg.middlewareAuth(apiCfg.handlerGetUser))
+
+	// Feed routes
+	v1Router.Post("/feeds", apiCfg.middlewareAuth(apiCfg.handlerCreateFeed))
+	v1Router.Get("/feeds", apiCfg.handlerGetFeeds)
+
+	// Feed follow routes
+	v1Router.Post("/feed_follows", apiCfg.middlewareAuth(apiCfg.handlerCreateFeedFollow))
+	v1Router.Get("/feed_follows", apiCfg.middlewareAuth(apiCfg.handlerGetFeedFollows))
+	v1Router.Delete("/feed_follows/{feedFollowID}", apiCfg.middlewareAuth(apiCfg.handlerDeleteFeedFollow))
+
+	// Posts route
+	v1Router.Get("/posts", apiCfg.middlewareAuth(apiCfg.handlerGetPosts))
 
 	router.Mount("/v1", v1Router)
 
