@@ -1,165 +1,81 @@
-# Web Scraper
+# Web Crawler
 
-A high-performance web scraping and crawling service built with Go.
-
-## Tech Stack
-
-- **Go** (1.25.3) - Core programming language
-- **Chi Router** (v5.2.3) - Lightweight, idiomatic HTTP router
-- **CORS Middleware** (v1.2.2) - Cross-origin resource sharing support
-- **godotenv** (v1.5.1) - Environment configuration management
-
-## System Architecture
-
-```
-┌─────────────────┐
-│   HTTP Client   │
-│  (Web Browser)  │
-└────────┬────────┘
-         │
-         │ HTTP/HTTPS
-         │
-         ▼
-┌─────────────────────────────────┐
-│      CORS Middleware            │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│      Chi Router (v1)            │
-│  ┌───────────────────────────┐  │
-│  │  /v1/healthz              │  │
-│  │  /v1/scrape (future)      │  │
-│  │  /v1/crawl  (future)      │  │
-│  └───────────────────────────┘  │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│     Handler Layer               │
-│  - Health Check                 │
-│  - JSON Response Utilities      │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│     Business Logic              │
-│  - Web Scraping Engine          │
-│  - Data Extraction              │
-│  - Content Processing           │
-└─────────────────────────────────┘
-```
+A web crawler and RSS aggregator built with Go. Crawl any site from a seed URL, visualize its link graph, and subscribe to discovered RSS feeds — all from a single interface.
 
 ## Features
 
-- RESTful API architecture with versioned endpoints
-- CORS-enabled for cross-origin requests
-- Health monitoring endpoint
-- Environment-based configuration
-- JSON response formatting
-- Extensible middleware pipeline
-- Structured error handling
+- **BFS web crawler** — concurrent worker pool, configurable depth and page limits, rate limiting, live progress tracking
+- **Graph analysis** — PageRank scoring, orphaned pages, broken links, redirect chains, link authority rankings
+- **RSS aggregator** — follow feeds, background scraping, post timeline
+- **Feed discovery** — automatically detects RSS/Atom feeds during crawl; subscribe in one click
+- **D3.js visualization** — force-directed graph with nodes sized by PageRank, colored by depth, zoom/pan, click-to-highlight
+- **REST API** — API key auth, 15+ endpoints, all responses typed via sqlc-generated queries
 
-## Installation
+## Stack
 
-### Prerequisites
+- **Go** — crawler engine, REST API (Chi router)
+- **PostgreSQL** — persistence (Goose migrations, sqlc)
+- **D3.js** — graph visualization
+- **Neon** — serverless Postgres hosting
 
-- Go 1.25.3 or higher
-- Git
+## Setup
 
-### Setup
+**Prerequisites:** Go 1.21+, PostgreSQL, [Goose](https://github.com/pressly/goose), [sqlc](https://sqlc.dev)
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/omarraf/web-scraper.git
 cd web-scraper
-```
-
-2. Install dependencies:
-```bash
-go mod download
 go mod vendor
 ```
 
-3. Create a `.env` file in the root directory:
-```bash
-PORT=8080
+Create a `.env` file:
+```
+PORT=8000
+DATABASE_URL=your_postgres_connection_string
 ```
 
-4. Build the application:
+Run migrations and start:
 ```bash
-go build -o web-scraper
-```
-
-## Configuration
-
-The application uses environment variables for configuration. Create a `.env` file with the following variables:
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `PORT` | HTTP server port | - | Yes |
-
-## Usage
-
-### Running the Server
-
-```bash
-./web-scraper
-```
-
-Or run directly with Go:
-
-```bash
+goose -dir sql/schema postgres $DATABASE_URL up
 go run .
 ```
 
-The server will start on the configured port (default: 8080).
+Open `http://localhost:8000` for the UI.
 
-### API Endpoints
+## API
 
-#### Health Check
-
-**GET** `/v1/healthz`
-
-Check the health status of the service.
-
-**Response:**
-```json
-{}
-```
-
-**Status Codes:**
-- `200 OK` - Service is healthy
-
-## Development
-
-### Project Structure
+All routes under `/v1`. Authenticated routes require `Authorization: ApiKey <key>`.
 
 ```
-.
-├── main.go                  # Application entry point
-├── handler_readiness.go     # Health check handler
-├── json.go                  # JSON response utilities
-├── go.mod                   # Go module definition
-├── go.sum                   # Dependency checksums
-├── .env                     # Environment configuration
-└── vendor/                  # Vendored dependencies
+POST   /v1/users                          Create user (returns API key)
+GET    /v1/users                          Get current user
+
+POST   /v1/feeds                          Add RSS feed
+GET    /v1/feeds                          List all feeds
+POST   /v1/feed_follows                   Follow a feed
+DELETE /v1/feed_follows/{id}              Unfollow a feed
+GET    /v1/posts                          Get posts from followed feeds
+
+POST   /v1/crawl_jobs                     Start a crawl
+GET    /v1/crawl_jobs                     List crawl jobs
+GET    /v1/crawl_jobs/{id}                Job status + progress
+DELETE /v1/crawl_jobs/{id}               Cancel running crawl
+GET    /v1/crawl_jobs/{id}/graph          Nodes + edges for visualization
+GET    /v1/crawl_jobs/{id}/analysis       Orphans, broken links, redirects, discovered feeds
+GET    /v1/crawl_jobs/{id}/pagerank       Top pages by PageRank
 ```
 
-### Building from Source
+## Quick start
 
 ```bash
-go build -o web-scraper
+# Create a user
+curl -X POST http://localhost:8000/v1/users -d '{"name":"alice"}'
+# → copy the api_key from the response
+
+# Start a crawl
+curl -X POST http://localhost:8000/v1/crawl_jobs \
+  -H "Authorization: ApiKey <key>" \
+  -d '{"seed_url":"https://example.com","max_depth":2,"max_pages":100}'
+
+# Or just open http://localhost:8000 and use the UI
 ```
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-
-
-
-
-
