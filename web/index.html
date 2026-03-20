@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Crawler</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+    header { padding: 12px 20px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.1rem; font-weight: 600; color: #38bdf8; }
+    .layout { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: 1fr; flex: 1; overflow: hidden; }
+    .sidebar { background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; }
+    .panel { padding: 16px; border-bottom: 1px solid #334155; }
+    .panel h2 { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 12px; }
+    label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px; }
+    input, select { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; color: #e2e8f0; font-size: 0.85rem; margin-bottom: 10px; }
+    input:focus, select:focus { outline: none; border-color: #38bdf8; }
+    .row { display: flex; gap: 8px; }
+    .row input { margin-bottom: 0; }
+    .row span { font-size: 0.75rem; color: #64748b; white-space: nowrap; align-self: center; }
+    button { width: 100%; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; margin-top: 4px; }
+    .btn-primary { background: #0ea5e9; color: #fff; }
+    .btn-primary:hover { background: #38bdf8; }
+    .btn-primary:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover { background: #f87171; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+    .status-pending   { background: #334155; color: #94a3b8; }
+    .status-running   { background: #0c4a6e; color: #38bdf8; }
+    .status-completed { background: #14532d; color: #4ade80; }
+    .status-failed    { background: #450a0a; color: #f87171; }
+    .progress { font-size: 0.75rem; color: #64748b; margin-top: 6px; }
+    .jobs-list { flex: 1; overflow-y: auto; }
+    .job-item { padding: 10px 16px; border-bottom: 1px solid #1e293b; cursor: pointer; }
+    .job-item:hover { background: #0f172a; }
+    .job-item.active { background: #0c4a6e; }
+    .job-url { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .job-meta { font-size: 0.7rem; color: #64748b; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+    .main-area { display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+    .tabs { background: #1e293b; border-bottom: 1px solid #334155; display: flex; padding: 0 16px; }
+    .tab { padding: 10px 16px; font-size: 0.8rem; cursor: pointer; border-bottom: 2px solid transparent; color: #94a3b8; }
+    .tab.active { border-color: #38bdf8; color: #38bdf8; }
+    .tab-content { overflow: hidden; position: relative; }
+    .tab-pane { display: none; position: absolute; inset: 0; overflow: auto; padding: 16px; }
+    .tab-pane.active { display: block; }
+    #graph-pane { display: none; position: absolute; inset: 0; overflow: hidden; }
+    #graph-pane.active { display: block; }
+    svg { width: 100%; height: 100%; }
+    .node circle { stroke-width: 1.5px; }
+    .node text { font-size: 10px; fill: #94a3b8; pointer-events: none; }
+    .link { stroke: #334155; stroke-opacity: 0.6; fill: none; }
+    .link.highlighted { stroke: #38bdf8; stroke-opacity: 1; }
+    .node.highlighted circle { stroke: #f59e0b; stroke-width: 3px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th { text-align: left; padding: 6px 10px; background: #1e293b; color: #94a3b8; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; position: sticky; top: 0; }
+    td { padding: 6px 10px; border-bottom: 1px solid #1e293b; word-break: break-all; }
+    tr:hover td { background: #1e293b; }
+    .empty { text-align: center; color: #64748b; padding: 40px; font-size: 0.85rem; }
+    .chain { background: #1e293b; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.75rem; }
+    .chain-arrow { color: #f59e0b; margin: 0 4px; }
+    .feed-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1e293b; font-size: 0.8rem; }
+    .feed-row span { flex: 1; word-break: break-all; color: #e2e8f0; }
+    .feed-row .subscribed { color: #4ade80; font-size: 0.7rem; }
+    .btn-subscribe { padding: 3px 10px; border-radius: 4px; border: 1px solid #0ea5e9; background: transparent; color: #0ea5e9; font-size: 0.75rem; cursor: pointer; white-space: nowrap; }
+    .btn-subscribe:hover { background: #0ea5e9; color: #fff; }
+    .btn-subscribe:disabled { border-color: #334155; color: #4ade80; cursor: default; }
+    .tooltip { position: fixed; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; font-size: 0.75rem; pointer-events: none; z-index: 100; max-width: 300px; word-break: break-all; display: none; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🕷 Web Crawler</h1>
+</header>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="panel">
+      <h2>Settings</h2>
+      <label>API Key</label>
+      <input type="password" id="apiKey" placeholder="Your API key" />
+      <label>Seed URL</label>
+      <input type="url" id="seedUrl" placeholder="https://example.com" />
+      <div class="row">
+        <div style="flex:1">
+          <label>Max Depth</label>
+          <input type="number" id="maxDepth" value="3" min="1" max="10" />
+        </div>
+        <div style="flex:1">
+          <label>Max Pages</label>
+          <input type="number" id="maxPages" value="100" min="10" max="500" />
+        </div>
+      </div>
+      <button class="btn-primary" id="startBtn" onclick="startCrawl()">Start Crawl</button>
+    </div>
+    <div class="panel" id="statusPanel" style="display:none">
+      <h2>Current Job</h2>
+      <div id="currentJobStatus"></div>
+      <button class="btn-danger" id="cancelBtn" style="display:none;margin-top:8px" onclick="cancelCrawl()">Cancel</button>
+    </div>
+    <div style="padding:10px 16px 6px; font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#475569">
+      Recent Jobs
+    </div>
+    <div class="jobs-list" id="jobsList"></div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-area">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('graph')">Graph</div>
+      <div class="tab" onclick="showTab('analysis')">Analysis</div>
+      <div class="tab" onclick="showTab('pagerank')">PageRank</div>
+    </div>
+    <div class="tab-content">
+      <div id="graph-pane" class="tab-pane active">
+        <div class="empty" id="graphEmpty">Select or start a crawl job to see the graph</div>
+        <svg id="graphSvg" style="display:none"></svg>
+      </div>
+      <div id="analysis-pane" class="tab-pane">
+        <div class="empty" id="analysisEmpty">No analysis data. Complete a crawl first.</div>
+        <div id="analysisContent" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+            <div>
+              <h2 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:#94a3b8;margin-bottom:8px">Orphaned Pages (<span id="orphanCount">0</span>)</h2>
+              <table><thead><tr><th>URL</th><th>Depth</th></tr></thead><tbody id="orphanTable"></tbody></table>
+            </div>
+            <div>
+              <h2 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:#94a3b8;margin-bottom:8px">Broken Links (<span id="brokenCount">0</span>)</h2>
+              <table><thead><tr><th>URL</th><th>Code</th></tr></thead><tbody id="brokenTable"></tbody></table>
+            </div>
+          </div>
+          <div>
+            <h2 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:#94a3b8;margin-bottom:8px">Redirect Chains ≥ 3 hops</h2>
+            <div id="redirectChains"></div>
+          </div>
+          <div style="margin-top:16px">
+            <h2 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:#94a3b8;margin-bottom:8px">Discovered RSS / Atom Feeds (<span id="feedCount">0</span>)</h2>
+            <div id="discoveredFeeds"></div>
+          </div>
+        </div>
+      </div>
+      <div id="pagerank-pane" class="tab-pane">
+        <div class="empty" id="pagerankEmpty">No PageRank data. Complete a crawl first.</div>
+        <div id="pagerankContent" style="display:none">
+          <table>
+            <thead><tr><th>#</th><th>URL</th><th>PageRank</th><th>Inbound</th><th>Depth</th></tr></thead>
+            <tbody id="pagerankTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const API = '/v1';
+let currentJobID = null;
+let pollInterval = null;
+let graphData = null;
+let simulation = null;
+let cachedJobs = [];
+
+function headers() {
+  const key = document.getElementById('apiKey').value.trim();
+  return { 'Content-Type': 'application/json', 'Authorization': `ApiKey ${key}` };
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, { headers: headers(), ...opts });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function startCrawl() {
+  const seedUrl = document.getElementById('seedUrl').value.trim();
+  if (!seedUrl) { alert('Enter a seed URL'); return; }
+  const maxDepth = parseInt(document.getElementById('maxDepth').value) || 3;
+  const maxPages = parseInt(document.getElementById('maxPages').value) || 100;
+  try {
+    document.getElementById('startBtn').disabled = true;
+    const job = await apiFetch('/crawl_jobs', {
+      method: 'POST',
+      body: JSON.stringify({ seed_url: seedUrl, max_depth: maxDepth, max_pages: maxPages })
+    });
+    // Prepend to cached list immediately, no full re-render needed
+    cachedJobs.unshift(job);
+    upsertJobInList(job);
+    selectJob(job.id);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    document.getElementById('startBtn').disabled = false;
+  }
+}
+
+async function cancelCrawl() {
+  if (!currentJobID) return;
+  try {
+    await apiFetch(`/crawl_jobs/${currentJobID}`, { method: 'DELETE' });
+  } catch(e) { console.error(e); }
+}
+
+// Full refresh of the jobs list — only called on page load
+async function loadJobs() {
+  try {
+    const jobs = await apiFetch('/crawl_jobs');
+    cachedJobs = jobs || [];
+    renderJobsList(cachedJobs);
+  } catch(e) { console.error(e); }
+}
+
+// Full re-render — only used on initial load
+function renderJobsList(jobs) {
+  const el = document.getElementById('jobsList');
+  el.innerHTML = '';
+  if (!jobs || jobs.length === 0) {
+    el.innerHTML = '<div class="empty">No jobs yet</div>';
+    return;
+  }
+  jobs.forEach(j => upsertJobInList(j));
+}
+
+// Insert or update a single job item in-place — no full re-render
+function upsertJobInList(job) {
+  const el = document.getElementById('jobsList');
+  // Remove "No jobs" placeholder if present
+  const placeholder = el.querySelector('.empty');
+  if (placeholder) placeholder.remove();
+
+  let item = el.querySelector(`.job-item[data-id="${job.id}"]`);
+  if (!item) {
+    item = document.createElement('div');
+    item.className = 'job-item';
+    item.dataset.id = job.id;
+    item.addEventListener('click', () => selectJob(job.id));
+    el.prepend(item); // newest on top
+  }
+  item.classList.toggle('active', job.id === currentJobID);
+  item.innerHTML = `
+    <div class="job-url">${job.seed_url}</div>
+    <div class="job-meta">
+      <span class="status-badge status-${job.status}">${job.status}</span>
+      <span>${job.pages_crawled} pages</span>
+    </div>
+  `;
+}
+
+function selectJob(id) {
+  const prev = document.querySelector(`.job-item.active`);
+  if (prev) prev.classList.remove('active');
+  const next = document.querySelector(`.job-item[data-id="${id}"]`);
+  if (next) next.classList.add('active');
+
+  currentJobID = id;
+  document.getElementById('statusPanel').style.display = 'block';
+  clearInterval(pollInterval);
+
+  // Immediate fetch, no wait
+  fetchAndHandleJob(id);
+
+  // Poll only the current job status — no full list re-render
+  pollInterval = setInterval(() => fetchAndHandleJob(id), 2000);
+}
+
+async function fetchAndHandleJob(id) {
+  const job = await apiFetch(`/crawl_jobs/${id}`).catch(() => null);
+  if (!job || job.id !== currentJobID) return;
+  renderStatus(job);
+  upsertJobInList(job); // update just this one item in the list
+
+  if (job.status === 'completed' || job.status === 'failed') {
+    clearInterval(pollInterval);
+    if (job.status === 'completed') {
+      loadGraphData(id);
+      loadAnalysis(id);
+      loadPageRank(id);
+    }
+  }
+}
+
+function renderStatus(job) {
+  const el = document.getElementById('currentJobStatus');
+  const cancelBtn = document.getElementById('cancelBtn');
+  el.innerHTML = `
+    <div><span class="status-badge status-${job.status}">${job.status}</span></div>
+    <div class="progress">${job.seed_url}</div>
+    <div class="progress">Pages: ${job.pages_crawled} / ${job.max_pages}</div>
+    ${job.error_msg ? `<div class="progress" style="color:#f87171">${job.error_msg}</div>` : ''}
+  `;
+  cancelBtn.style.display = job.status === 'running' ? 'block' : 'none';
+}
+
+async function loadGraphData(id) {
+  try {
+    graphData = await apiFetch(`/crawl_jobs/${id}/graph`);
+    renderGraph(graphData);
+  } catch(e) { console.error(e); }
+}
+
+async function loadAnalysis(id) {
+  try {
+    const data = await apiFetch(`/crawl_jobs/${id}/analysis`);
+    renderAnalysis(data);
+  } catch(e) { console.error(e); }
+}
+
+async function loadPageRank(id) {
+  try {
+    const data = await apiFetch(`/crawl_jobs/${id}/pagerank?limit=50`);
+    renderPageRank(data);
+  } catch(e) { console.error(e); }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['graph','analysis','pagerank'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById(name + '-pane').classList.add('active');
+}
+
+// --- D3 Graph ---
+function renderGraph(data) {
+  const svg = document.getElementById('graphSvg');
+  const empty = document.getElementById('graphEmpty');
+  if (!data || !data.nodes || data.nodes.length === 0) {
+    svg.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  svg.style.display = 'block';
+  empty.style.display = 'none';
+
+  const svgEl = d3.select('#graphSvg');
+  svgEl.selectAll('*').remove();
+
+  const W = svg.clientWidth, H = svg.clientHeight;
+  const g = svgEl.append('g');
+
+  // Zoom/pan
+  svgEl.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => g.attr('transform', e.transform)));
+
+  // Arrow marker
+  svgEl.append('defs').append('marker')
+    .attr('id', 'arrow').attr('viewBox', '0 -5 10 10').attr('refX', 18).attr('refY', 0)
+    .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#475569');
+
+  const maxPR = d3.max(data.nodes, d => d.page_rank) || 1;
+  const maxDepth = d3.max(data.nodes, d => d.depth) || 1;
+
+  // Color: green (shallow) → red (deep)
+  const colorScale = d3.scaleLinear().domain([0, maxDepth]).range(['#4ade80', '#f87171']);
+  // Radius: proportional to pagerank
+  const rScale = d3.scaleSqrt().domain([0, maxPR]).range([4, 20]);
+
+  const nodeMap = new Map(data.nodes.map(d => [d.id, d]));
+
+  const link = g.append('g').selectAll('line')
+    .data(data.edges).enter().append('line')
+    .attr('class', 'link').attr('marker-end', 'url(#arrow)');
+
+  const node = g.append('g').selectAll('.node')
+    .data(data.nodes).enter().append('g').attr('class', 'node')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('click', (e, d) => highlightNode(d, node, link))
+    .on('mouseover', (e, d) => showTooltip(e, d))
+    .on('mousemove', (e) => moveTooltip(e))
+    .on('mouseout', hideTooltip);
+
+  node.append('circle')
+    .attr('r', d => rScale(d.page_rank))
+    .attr('fill', d => colorScale(d.depth))
+    .attr('stroke', '#1e293b');
+
+  node.append('text').attr('x', d => rScale(d.page_rank) + 3).attr('dy', '0.35em')
+    .text(d => { try { return new URL(d.id).pathname.slice(0, 20) || '/'; } catch { return d.id.slice(0, 20); } });
+
+  simulation = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(80))
+    .force('charge', d3.forceManyBody().strength(-120))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(d => rScale(d.page_rank) + 4))
+    .on('tick', () => {
+      link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+}
+
+function highlightNode(d, nodes, links) {
+  nodes.classed('highlighted', n => n.id === d.id);
+  links.classed('highlighted', l => l.source.id === d.id || l.target.id === d.id);
+}
+
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, d) {
+  tooltip.innerHTML = `<strong>${d.id}</strong><br>Depth: ${d.depth} | PR: ${d.page_rank.toFixed(4)}<br>Inbound: ${d.inbound_count} | Status: ${d.status_code || '?'}${d.is_redirect ? ' (redirect)' : ''}`;
+  tooltip.style.display = 'block';
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top = (e.clientY - 10) + 'px';
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+// --- Analysis ---
+function renderAnalysis(data) {
+  document.getElementById('analysisEmpty').style.display = 'none';
+  document.getElementById('analysisContent').style.display = 'block';
+
+  document.getElementById('orphanCount').textContent = (data.orphaned_pages || []).length;
+  document.getElementById('brokenCount').textContent = (data.broken_links || []).length;
+
+  document.getElementById('orphanTable').innerHTML = (data.orphaned_pages || []).map(p =>
+    `<tr><td>${p.url}</td><td>${p.depth}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">None</td></tr>';
+
+  document.getElementById('brokenTable').innerHTML = (data.broken_links || []).map(p =>
+    `<tr><td>${p.url}</td><td>${p.status_code}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">None</td></tr>';
+
+  const chains = data.redirect_chains || [];
+  document.getElementById('redirectChains').innerHTML = chains.length
+    ? chains.map(c => `<div class="chain">${c.chain.map(u => `<span>${u}</span>`).join('<span class="chain-arrow">→</span>')} <small style="color:#64748b">(${c.hops} hops)</small></div>`).join('')
+    : '<div class="empty">No redirect chains of 3+ hops</div>';
+
+  const feeds = data.discovered_feeds || [];
+  document.getElementById('feedCount').textContent = feeds.length;
+  const feedsEl = document.getElementById('discoveredFeeds');
+  if (feeds.length === 0) {
+    feedsEl.innerHTML = '<div class="empty">No RSS/Atom feeds found on this site</div>';
+  } else {
+    feedsEl.innerHTML = feeds.map(url => `
+      <div class="feed-row" id="feed-row-${btoa(url).replace(/=/g,'')}">
+        <span>${url}</span>
+        <button class="btn-subscribe" onclick="subscribeFeed('${url}', this)">Subscribe</button>
+      </div>
+    `).join('');
+  }
+}
+
+async function subscribeFeed(feedUrl, btn) {
+  // Derive a name from the URL hostname
+  let name;
+  try { name = new URL(feedUrl).hostname; } catch { name = feedUrl; }
+  btn.disabled = true;
+  btn.textContent = 'Subscribing…';
+  try {
+    await apiFetch('/feeds', {
+      method: 'POST',
+      body: JSON.stringify({ name, url: feedUrl })
+    });
+    btn.textContent = '✓ Subscribed';
+    btn.nextElementSibling && btn.nextElementSibling.remove();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Subscribe';
+    alert('Failed to subscribe: ' + e.message);
+  }
+}
+
+// --- PageRank ---
+function renderPageRank(data) {
+  document.getElementById('pagerankEmpty').style.display = 'none';
+  document.getElementById('pagerankContent').style.display = 'block';
+  document.getElementById('pagerankTable').innerHTML = data.map((p, i) =>
+    `<tr><td>${i+1}</td><td>${p.url}</td><td>${p.page_rank.toFixed(6)}</td><td>${p.inbound_count}</td><td>${p.depth}</td></tr>`
+  ).join('');
+}
+
+// Initial load
+window.onload = () => {
+  const savedKey = sessionStorage.getItem('apiKey');
+  if (savedKey) document.getElementById('apiKey').value = savedKey;
+  document.getElementById('apiKey').addEventListener('change', e => sessionStorage.setItem('apiKey', e.target.value));
+  loadJobs();
+};
+</script>
+</body>
+</html>

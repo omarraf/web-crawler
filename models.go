@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -90,3 +91,53 @@ func databasePostToPost(dbPost database.Post) Post {
 		FeedID:      dbPost.FeedID,
 	}
 }
+
+type CrawlJob struct {
+	ID              uuid.UUID  `json:"id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	UserID          uuid.UUID  `json:"user_id"`
+	SeedURL         string     `json:"seed_url"`
+	Status          string     `json:"status"`
+	MaxDepth        int32      `json:"max_depth"`
+	MaxPages        int32      `json:"max_pages"`
+	PagesCrawled    int32      `json:"pages_crawled"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
+	ErrorMsg        *string    `json:"error_msg,omitempty"`
+	DiscoveredFeeds []string   `json:"discovered_feeds,omitempty"`
+}
+
+func databaseCrawlJobToCrawlJob(j database.CrawlJob) CrawlJob {
+	out := CrawlJob{
+		ID:           j.ID,
+		CreatedAt:    j.CreatedAt,
+		UpdatedAt:    j.UpdatedAt,
+		UserID:       j.UserID,
+		SeedURL:      j.SeedUrl,
+		Status:       j.Status,
+		MaxDepth:     j.MaxDepth,
+		MaxPages:     j.MaxPages,
+		PagesCrawled: j.PagesCrawled,
+	}
+	if j.StartedAt.Valid {
+		t := j.StartedAt.Time
+		out.StartedAt = &t
+	}
+	if j.FinishedAt.Valid {
+		t := j.FinishedAt.Time
+		out.FinishedAt = &t
+	}
+	if j.ErrorMsg.Valid {
+		out.ErrorMsg = &j.ErrorMsg.String
+	}
+	if j.DiscoveredFeeds != "" {
+		for _, f := range strings.Split(j.DiscoveredFeeds, "\n") {
+			if f = strings.TrimSpace(f); f != "" {
+				out.DiscoveredFeeds = append(out.DiscoveredFeeds, f)
+			}
+		}
+	}
+	return out
+}
+

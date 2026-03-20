@@ -11,6 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
+type CrawlJob struct {
+	ID              uuid.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	UserID          uuid.UUID
+	SeedUrl         string
+	Status          string
+	MaxDepth        int32
+	MaxPages        int32
+	PagesCrawled    int32
+	StartedAt       sql.NullTime
+	FinishedAt      sql.NullTime
+	ErrorMsg        sql.NullString
+	DiscoveredFeeds string
+}
+
 type Feed struct {
 	ID            uuid.UUID
 	CreatedAt     time.Time
@@ -27,6 +43,26 @@ type FeedFollow struct {
 	UpdatedAt time.Time
 	UserID    uuid.UUID
 	FeedID    uuid.UUID
+}
+
+type Page struct {
+	ID           uuid.UUID
+	CreatedAt    time.Time
+	CrawlJobID   uuid.UUID
+	Url          string
+	StatusCode   sql.NullInt32
+	Depth        int32
+	PageRank     float64
+	InboundCount int32
+	IsRedirect   bool
+	RedirectTo   sql.NullString
+}
+
+type PageLink struct {
+	ID         uuid.UUID
+	CrawlJobID uuid.UUID
+	FromUrl    string
+	ToUrl      string
 }
 
 type Post struct {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,7 +17,8 @@ import (
 )
 
 type apiConfig struct {
-	DB *database.Queries
+	DB           *database.Queries
+	CrawlEngines sync.Map // jobID (uuid.UUID) -> context.CancelFunc
 }
 
 func main() {
@@ -36,6 +38,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Cannot open database:", err)
 	}
+	// Neon's pgBouncer pooler (transaction mode) doesn't support prepared
+	// statements across connections. Pin to a single connection to avoid
+	// "bind message has N result formats but query has M columns" errors.
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
 
 	apiCfg := apiConfig{
 		DB: database.New(conn),
@@ -66,7 +73,6 @@ func main() {
 	v1Router.HandleFunc("/healthz", handlerReadiness)
 	v1Router.Get("/err", handleErr)
 	v1Router.Post("/users", apiCfg.handlerCreateUser)
-	// This route requires authentication - notice how we wrap it with middlewareAuth
 	v1Router.Get("/users", apiCfg.middlewareAuth(apiCfg.handlerGetUser))
 
 	// Feed routes
@@ -81,7 +87,21 @@ func main() {
 	// Posts route
 	v1Router.Get("/posts", apiCfg.middlewareAuth(apiCfg.handlerGetPosts))
 
+	// Crawl job routes
+	v1Router.Post("/crawl_jobs", apiCfg.middlewareAuth(apiCfg.handlerCreateCrawlJob))
+	v1Router.Get("/crawl_jobs", apiCfg.middlewareAuth(apiCfg.handlerListCrawlJobs))
+	v1Router.Get("/crawl_jobs/{jobID}", apiCfg.middlewareAuth(apiCfg.handlerGetCrawlJob))
+	v1Router.Delete("/crawl_jobs/{jobID}", apiCfg.middlewareAuth(apiCfg.handlerDeleteCrawlJob))
+
+	// Graph + analysis routes
+	v1Router.Get("/crawl_jobs/{jobID}/graph", apiCfg.middlewareAuth(apiCfg.handlerGetGraph))
+	v1Router.Get("/crawl_jobs/{jobID}/analysis", apiCfg.middlewareAuth(apiCfg.handlerGetAnalysis))
+	v1Router.Get("/crawl_jobs/{jobID}/pagerank", apiCfg.middlewareAuth(apiCfg.handlerGetPageRank))
+
 	router.Mount("/v1", v1Router)
+
+	// Serve the D3 frontend at /
+	router.Handle("/*", http.FileServer(http.Dir("web")))
 
 	srv := &http.Server{
 		Handler: router,
